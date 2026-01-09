@@ -11,6 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# python version: 3.13.11
+# TensorFlow version: 2.20.0
+# TensorFlow 1.x -> 2.x
+# 
+# tf-slim 라이브러리의 batch_norm 함수가 최신 텐서플로우에서 더 이상 지원하지 않는
+# 오래된 방식을 사용 했었음.
+#
+#
 # =============================================================================
 """MobileNet v1.
 
@@ -109,6 +118,7 @@ import functools
 
 import tensorflow as tf
 import tf_slim as slim
+import tensorflow.keras as layers
 
 # Conv and DepthSepConv는 MobileNet 레이어 구성을 정의
 # Conv defines 3x3 convolution layers
@@ -530,8 +540,7 @@ def mobilenet_v1_arg_scope(
     regularize_depthwise=False,
     batch_norm_decay=0.9997,
     batch_norm_epsilon=0.001,
-    batch_norm_updates_collections=tf.compat.v1.GraphKeys.UPDATE_OPS,
-    normalizer_fn=slim.batch_norm):
+    batch_norm_updates_collections=tf.compat.v1.GraphKeys.UPDATE_OPS):
   """
   MobileNetV1의 기본 arg_scope를 정의한다.
   코드의 중복을 줄이고, 모델의 하이퍼파라미터를 한 곳에서 체계적으로 관리.
@@ -553,31 +562,36 @@ def mobilenet_v1_arg_scope(
     MobileNet V1 모델에 사용할 arg_scope.
   """
   batch_norm_params = {
-      'center': True,
-      'scale': True,
-      'decay': batch_norm_decay,
-      'epsilon': batch_norm_epsilon,
-      'updates_collections': batch_norm_updates_collections,
+      # Keras Layer는 'decay' 대신 'momentum' 파라미터를 사용.
+      'momentum': batch_norm_decay,
+      'epsilon': batch_norm_epsilon
   }
+  # Keras Layer는 'is_training' 대신 'training' 파라미터를 사용.
   if is_training is not None:
-    batch_norm_params['is_training'] = is_training
+    batch_norm_params['training'] = is_training
 
-  # Conv 및 DepthSepConv 레이어의 가중치에 대해 weight_decay를 설정한다.
+  # Set weight_decay for Conv and DepthSepConv layers.
   weights_init = tf.compat.v1.truncated_normal_initializer(stddev=stddev)                       # 절단 정규분포
   regularizer = tf.keras.regularizers.l2(0.5 * (weight_decay))                                     # L2 정규화
   if regularize_depthwise:
     depthwise_regularizer = regularizer
   else:
     depthwise_regularizer = None
-  with slim.arg_scope([slim.conv2d, slim.separable_conv2d],
-                      weights_initializer=weights_init,
-                      activation_fn=tf.nn.relu6, normalizer_fn=normalizer_fn):
+  with slim.arg_scope(
+    [slim.conv2d, slim.separable_conv2d],
+    weights_initializer=weights_init,
+    activation_fn=tf.nn.relu6,
+    # slim.batch_norm 대신 Keras의 BatchNormalization 레이어 사용
+    normalizer_fn=layers.BatchNormalization,
+    # Keras Layer에 맞는 파라미터 전달
+    normalizer_params=batch_norm_params):
     # 모든 conv와 separableConv에 적용
-    with slim.arg_scope([slim.batch_norm], **batch_norm_params):
-      # 모든 batch_norm에 적용
-      with slim.arg_scope([slim.conv2d], weights_regularizer=regularizer):
-        # 일반 Conv 레이어에만 적용
-        with slim.arg_scope([slim.separable_conv2d],
-                            weights_regularizer=depthwise_regularizer) as sc:
+    with slim.arg_scope([slim.conv2d], weights_regularizer=regularizer):
+      # 일반 Conv 레이어에만 적용
+      with slim.arg_scope([slim.separable_conv2d],
+                          weights_regularizer=depthwise_regularizer) as sc:
           # SeparableConv에만 적용
           return sc
+# slim.batch_norm 대신 Keras의 BatchNormalization 레이어를 사용하도록 변경.
+# Keras의 BatchNormalization 레이어는 decay와 is_training이 아닌 momentum과 training 파라미터를 사용.
+
