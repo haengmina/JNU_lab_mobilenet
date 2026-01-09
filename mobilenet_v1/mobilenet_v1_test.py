@@ -22,7 +22,7 @@ import numpy as np
 import tensorflow as tf
 import tf_slim as slim
 
-from nets import mobilenet_v1
+import mobilenet_v1
 
 
 class MobilenetV1Test(tf.test.TestCase):
