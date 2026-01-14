@@ -271,10 +271,10 @@ def mobilenet_v1_base(inputs,
   # 각 레이어에서 감소(경량화)된 depth 값을 계산하기 위해 사용된다.
   if depth_multiplier <= 0:
     raise ValueError('depth_multiplier is not greater than zero.')
-
+    # raise : 예외를 발생시키는 키워드.프로그램 흐름 중단. 오류 알림.
   if conv_defs is None:
     conv_defs = MOBILENETV1_CONV_DEFS
-
+    
   if output_stride is not None and output_stride not in [8, 16, 32]:
     raise ValueError('Only allowed output_stride values are 8, 16, 32.')
 
@@ -293,16 +293,17 @@ def mobilenet_v1_base(inputs,
 
   with tf.compat.v1.variable_scope(scope, 'MobilenetV1', [inputs]):
     with slim.arg_scope([slim.conv2d, slim.separable_conv2d], padding=padding):
+      
+      current_stride = 1
       # current_stride 변수는 현재 레이어까지의 합성곱 스트라이드의 누적 곱으로,
       # 활성화 맵의 출력 스트라이드(output stride)를 추적한다.
       # 이를 통해 다음 합성곱을 적용했을 때 출력 스트라이드가
       # 목표 output_stride보다 커질 경우,
       # atrous(확장) 합성곱을 사용하도록 판단할 수 있다.
-      current_stride = 1
-
-      # The atrous convolution rate parameter.
+      
       rate = 1
-
+      # The atrous convolution rate parameter.
+      
       net = inputs
       # net은 신경망 계층을 통과하면서 점진적으로 업데이트될 텐서.
       # 초기에는 입력 텐서(inputs)로 설정됨.
@@ -310,18 +311,21 @@ def mobilenet_v1_base(inputs,
       for i, conv_def in enumerate(conv_defs):
         # 각 layer 순회하며 가져와 신경망을 구성.
         end_point_base = 'Conv2d_%d' % i
+        # %i = %d
 
         '''
         3단계 : 스트라이드 및 atrous rate 결정
         output_stride를 구현하는 핵심 로직
         '''
         if output_stride is not None and current_stride == output_stride:
+          # 현재까지 축소된 비율이 우리가 목표로 하는 축소 비율에 도달했는가?
           # 출력 해상도가 목표 수준에 도달하면 더 이상 해상도를 줄이지 않고,
           # atrous 합성곱을 사용해 receptive field만 확장한다.
           # 이때 이후 레이어를 위해 atrous rate를 누적해서 증가시킨다.
           layer_stride = 1
           layer_rate = rate
           rate *= conv_def.stride
+          # 다음 atrous conv을 위해 rate 값을 현재 레이어의 원래 stride만큼 곱함.
         else:
           layer_stride = conv_def.stride
           layer_rate = 1
@@ -337,8 +341,8 @@ def mobilenet_v1_base(inputs,
         `end_points[end_point] = net`: 생성된 각 계층의 출력 net을 end_points 딕셔너리에 저장합니다.
         `if end_point == final_endpoint:`: 현재 만든 계층이 사용자가 요청한 마지막 계층(final_endpoint)이라면, 더 이상 망을 구성하지 않고 즉시 결과를 반환합니다.
         '''
-        if isinstance(conv_def, Conv):
-          end_point = end_point_base
+        if isinstance(conv_def, Conv):                        # Standard Convolution layer
+          end_point = end_point_base                          # 해당 레이어의 출력 텐서를 외부에서 참조 가능.
           if use_explicit_padding:
             net = _fixed_padding(net, conv_def.kernel)
           net = slim.conv2d(net, depth(conv_def.depth), conv_def.kernel,
@@ -348,8 +352,8 @@ def mobilenet_v1_base(inputs,
           if end_point == final_endpoint:
             return net, end_points
 
-        elif isinstance(conv_def, DepthSepConv):
-          end_point = end_point_base + '_depthwise'
+        elif isinstance(conv_def, DepthSepConv):               # Depthwise Separable Convolution layer
+          end_point = end_point_base + '_depthwise'            # 'Conv2d_1_depthwise'
 
           # filters=None일 경우 depthwise convolution 수행
           if use_explicit_padding:
@@ -359,7 +363,7 @@ def mobilenet_v1_base(inputs,
                                       stride=layer_stride,
                                       rate=layer_rate,
                                       scope=end_point)
-
+          # num_output = None : slim은 PW를 생략하고 DW만 수행. None은 채널 수를 바꾸지 말고, 입력 채널 수와 동일하게 유지하라는 의미.
           end_points[end_point] = net
           if end_point == final_endpoint:
             return net, end_points
@@ -408,7 +412,8 @@ def mobilenet_v1(inputs,
 
 
   Args:
-    inputs: [batch_size, height, width, channels] 형태의 텐서 num_classes: 예측할 클래스의 개수.
+    inputs: [batch_size, height, width, channels] 형태의 텐서
+    num_classes: 예측할 클래스의 개수.
     0 또는 None인 경우 logits 레이어는 생성되지 않으며, 대신 dropout 적용 이전의 logits 입력 특성(feature)이 반환.
     dropout_keep_prob: 활성화 값 중 유지되는 비율.
     is_training: 현재 학습 중인지 여부를 나타내는 불리언 값.
@@ -424,8 +429,7 @@ def mobilenet_v1(inputs,
     reuse: 네트워크 및 변수들을 재사용할지 여부.
     재사용하려면 scope가 반드시 지정되어야 한다.
     scope: 선택적 variable_scope.
-    global_pool: logits 레이어 이전에 수행되는 평균 풀링(avg pooling)을
-    제어하는 선택적 불리언 플래그.
+    global_pool: logits 레이어 이전에 수행되는 평균 풀링(avg pooling)을 제어하는 선택적 불리언 플래그.
     False이거나 설정되지 않은 경우, 기본 입력 크기는 1x1로 줄어들도록 고정된 윈도우로 풀링되며,
     더 큰 입력의 경우에는 더 큰 출력이 생성된다.
     True인 경우, 입력 크기와 상관없이 항상 1x1로 풀링된다.
@@ -447,7 +451,7 @@ def mobilenet_v1(inputs,
                      len(input_shape))
 
   with tf.compat.v1.variable_scope(
-      scope, 'MobilenetV1', [inputs], reuse=reuse) as scope:
+      scope, 'MobilenetV1', [inputs], reuse=reuse) as scope:               # 변수 스코프 설정. 
     with slim.arg_scope([slim.batch_norm, slim.dropout],
                         is_training=is_training):                          # 학습 모드일 때와 평가 모드일 때 동작 다르게
       net, end_points = mobilenet_v1_base(inputs, scope=scope,

@@ -1,3 +1,7 @@
+<!--VScode Markdown Preview : 
+    현재 파일 미리 보기 : Ctrl + Shift + V 
+    분할 화면으로 미리 보기 : Ctrl + K -> V -->
+
 # MobilenetV2 이후 모델
 MobilenetV2 및 그 이후 모델에 대한 내용은 [mobilenet/README.md](mobilenet/README.md) 파일을 참조하십시오.
 
